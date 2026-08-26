@@ -90,7 +90,7 @@ jobs:
       # every run (~12 minutes of the ~25-40 minute total job time).
       - name: Cache Gradle
         if: github.event_name != 'pull_request' || steps.changes.outputs.flutter == 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.gradle/caches
