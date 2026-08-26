@@ -1,0 +1,72 @@
+version: 2
+updates:
+  # ── Flutter / Dart (pub) ────────────────────────────────────────────────────
+  - package-ecosystem: pub
+    directory: /flutter-app
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - flutter
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      flutter-deps:
+        patterns:
+          - "*"
+    ignore:
+      # Keep firebase packages together to avoid SDK version mismatches
+      - dependency-name: "firebase_*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "cloud_firestore"
+        update-types: ["version-update:semver-major"]
+
+  # ── npm (Next.js website) ────────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /website
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - npm
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      next-ecosystem:
+        patterns:
+          - "next"
+          - "react"
+          - "react-dom"
+          - "@types/react*"
+      sanity:
+        patterns:
+          - "@sanity/*"
+          - "sanity"
+      testing:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+          - "@playwright/*"
+          - "playwright"
+
+  # ── GitHub Actions ─────────────────────────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Asia/Kolkata
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: "ci(deps)"

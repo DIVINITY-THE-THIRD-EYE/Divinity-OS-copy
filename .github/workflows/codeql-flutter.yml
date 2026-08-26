@@ -1,0 +1,124 @@
+name: CodeQL Security Scan (Flutter/Android)
+
+# Repo went public on 2026-07-05: GitHub-hosted Actions minutes are now
+# unlimited for public repos, and GitHub Advanced Security (Code scanning) is
+# free — the two constraints that pushed this off pull_request are gone, so
+# pull_request is back. See docs/CODEQL_VERIFICATION.md and
+# docs/GITHUB_CONFIGURATION_REPORT.md for the re-audit that confirmed this.
+on:
+  push:
+    branches: [main, feature/trust-certificates]
+    paths:
+      - 'flutter-app/**'
+  # No paths filter on PRs: "CodeQL Analysis" is a REQUIRED status check in
+  # branch protection. A path filter here means it never reports on
+  # website/supabase-only PRs, which then stay permanently "blocked" (exactly
+  # what happened to PR #28). Same fix as flutter.yml: always run, gate the
+  # heavy build/scan steps behind a change-detection guard so the required
+  # context still posts green on unrelated PRs.
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run every Sunday at 2 AM IST (8:30 PM UTC Saturday)
+    - cron: '30 20 * * 6'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: CodeQL Analysis
+    # Prepared for a future self-hosted runner without switching to one yet:
+    # set the repo/org variable CODEQL_RUNNER_LABEL (Settings -> Secrets and
+    # variables -> Actions -> Variables) to a self-hosted runner label to
+    # opt in later. Unset, this resolves to "ubuntu-latest" exactly as
+    # before — no behavior change until that variable is deliberately set.
+    # See docs/SELF_HOSTED_RUNNER_SETUP.md before setting it.
+    runs-on: ${{ vars.CODEQL_RUNNER_LABEL || 'ubuntu-latest' }}
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      # Only PRs get the short-circuit; push/schedule/dispatch always scan.
+      - name: Detect Flutter changes
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            flutter:
+              - 'flutter-app/**'
+              - '.github/workflows/codeql-flutter.yml'
+
+      # security-extended (not security-and-quality): keeps every security
+      # query security-and-quality would run, drops only the pure code-style/
+      # quality queries (naming conventions, dead code, etc. — not
+      # vulnerabilities). This alone cut the query count from 244 to a much
+      # smaller security-focused set, directly addressing the run times that
+      # were exceeding this account's available Actions minutes. See
+      # docs/CODEQL_STRATEGY.md for the full rationale.
+      - name: Initialize CodeQL
+        if: github.event_name != 'pull_request' || steps.changes.outputs.flutter == 'true'
+        uses: github/codeql-action/init@v3
+        with:
+          languages: java-kotlin
+          queries: security-extended
+
+      - name: Set up Java 17
+        if: github.event_name != 'pull_request' || steps.changes.outputs.flutter == 'true'
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - name: Set up Flutter
+        if: github.event_name != 'pull_request' || steps.changes.outputs.flutter == 'true'
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      # Gradle dependency/wrapper caching — the debug APK build previously
+      # re-downloaded the full Gradle/Android dependency graph from scratch
+      # every run (~12 minutes of the ~25-40 minute total job time).
+      - name: Cache Gradle
+        if: github.event_name != 'pull_request' || steps.changes.outputs.flutter == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('flutter-app/android/**/*.gradle*', 'flutter-app/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Install dependencies
+        if: github.event_name != 'pull_request' || steps.changes.outputs.flutter == 'true'
+        working-directory: flutter-app
+        run: flutter pub get
+
+      - name: Build (required for CodeQL to analyze generated code)
+        if: github.event_name != 'pull_request' || steps.changes.outputs.flutter == 'true'
+        working-directory: flutter-app
+        run: flutter build apk --debug
+        env:
+          # Use placeholder values for CodeQL scan only
+          SUPABASE_URL: https://placeholder.supabase.co
+          SUPABASE_ANON_KEY: placeholder-anon-key
+
+      # Advanced Security (Code scanning) is enabled now that the repo is
+      # public, so the default upload:always works — results go to the
+      # Security tab instead of only a downloadable artifact. See
+      # docs/CODEQL_VERIFICATION.md for the run that confirmed this.
+      - name: Perform CodeQL Analysis
+        if: github.event_name != 'pull_request' || steps.changes.outputs.flutter == 'true'
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:java-kotlin

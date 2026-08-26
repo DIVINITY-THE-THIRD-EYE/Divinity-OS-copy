@@ -1,0 +1,38 @@
+name: PR Size Labeler
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  size-label:
+    name: Label PR by size
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+
+    steps:
+      - uses: pascalgn/size-label-action@v0.5.4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # v0.5.4 only accepts `sizes`, keyed by the lower-bound line-count
+          # threshold (ascending), with the bare size name as the value — the
+          # action prepends "size/" itself (see pascalgn/size-label-action
+          # index.js: `size/${sizes[lines]}`). There is no `labels`,
+          # `fail_if_xl`, or `message_if_xl` input in this version; those were
+          # silently ignored before, causing every run to fail with a 422 when
+          # the action tried to apply a null label.
+          sizes: >
+            {
+              "0": "XS",
+              "10": "S",
+              "50": "M",
+              "150": "L",
+              "500": "XL",
+              "1000": "XXL"
+            }
